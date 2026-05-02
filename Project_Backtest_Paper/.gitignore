@@ -1,0 +1,22 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment Variables & Secrets
+db_manager/.env
+db_manager/access_token.txt
+
+# Logs
+*.log
+bot_logs.txt
+
+# Excel Reports & Data
+*.xlsx
+*.csv
+backtest_report.xlsx
+
+# IDEs & Editor
+.vscode/
+.idea/
+.DS_Store
