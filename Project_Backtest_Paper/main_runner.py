@@ -1,0 +1,84 @@
+import sys
+import os
+import time
+import threading
+import importlib
+from datetime import datetime
+
+# Add current dir to path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import db_manager.config as config
+from kiteconnect import KiteConnect
+from db_manager.config import ACCESS_TOKEN_FILE, API_KEY, API_SECRET
+
+def generate_or_load_session():
+    kite = KiteConnect(api_key=API_KEY, timeout=30)
+    if os.path.exists(ACCESS_TOKEN_FILE):
+        with open(ACCESS_TOKEN_FILE, "r") as f:
+            access_token = f.read().strip()
+            if access_token:
+                kite.set_access_token(access_token)
+                try:
+                    kite.profile()
+                    print(f"✅ Kite session active for Backtest.")
+                    return kite
+                except: pass
+    print("❌ No valid Kite session. Please login via Lab Dashboard.")
+    sys.exit(1)
+
+def main():
+    print("🧪 Starting Paper/Backtest Engine...")
+    kite = generate_or_load_session()
+    
+    # Reload config to get latest strategy from Lab Dashboard
+    importlib.reload(config)
+    strategy = getattr(config, 'ACTIVE_STRATEGY', 'GREEN')
+    print(f"📡 Simulation Strategy: {strategy}")
+
+    # --- START EXIT MONITORING (Background) ---
+    if strategy == "GREEN":
+        from strategies.engine_exit_green import ExitEngine
+        exit_engine = ExitEngine(kite, paper_trade=True)
+    else:
+        from strategies.engine_exit_rsi import ExitEngineRSI
+        exit_engine = ExitEngineRSI(kite, paper_trade=True)
+        
+    threading.Thread(target=exit_engine.start_monitoring, daemon=True).start()
+    print(f"🛡️ Paper Exit Monitor active for {strategy}")
+
+    # --- ENTRY LOOP ---
+    df_cache = {}
+    while True:
+        try:
+            importlib.reload(config)
+            current_strategy = getattr(config, 'ACTIVE_STRATEGY', 'GREEN')
+            is_running = str(getattr(config, 'BOT_RUNNING', 'True')).lower() == 'true'
+            
+            if is_running:
+                if current_strategy == "GREEN":
+                    from strategies.engine_entry_green import run_entry_cycle
+                    run_entry_cycle(kite, df_cache, paper_trade=True)
+                else:
+                    from strategies.engine_entry_rsi import run_entry_cycle_rsi
+                    run_entry_cycle_rsi(kite, df_cache, paper_trade=True)
+                
+                # --- SAVE CACHE FOR LAB MONITOR ---
+                try:
+                    import pickle
+                    cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "live_df_cache.pkl")
+                    with open(cache_file, "wb") as f:
+                        pickle.dump(df_cache, f)
+                except: pass
+            else:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Simulation PAUSED (Graceful). Scanning skipped.")
+            
+            timeframe = getattr(config, "TIMEFRAME", 'minute')
+            wait_seconds = 60 if timeframe == "minute" else 300
+            time.sleep(wait_seconds)
+            
+        except Exception as e:
+            print(f"⚠️ Simulation Error: {e}")
+            time.sleep(5)
+
+if __name__ == "__main__":
+    main()

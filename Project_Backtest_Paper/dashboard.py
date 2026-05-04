@@ -5,294 +5,214 @@ import sys
 import time
 import subprocess
 import mysql.connector
+import psutil
+import pickle
 from datetime import datetime
+from dotenv import load_dotenv
+from kiteconnect import KiteConnect
 
 # Page Config
-st.set_page_config(page_title="Multi-Project Terminal", layout="wide")
+st.set_page_config(page_title="Lab Terminal Pro", layout="wide", page_icon="🧪")
 
-# Paths
+# Paths & Auth
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECTS = {
-    "GREEN": {
-        "path": os.path.join(ROOT_DIR, "Project_Green"),
-        "db_config": "trading_bot_green", # Default, will try to read from config
-        "color": "#00ffcc"
-    },
-    "RSI": {
-        "path": os.path.join(ROOT_DIR, "Project_RSI"),
-        "db_config": "trading_bot_rsi", # Default
-        "color": "#ff4b4b"
-    }
-}
+CONFIG_PATH = os.path.join(ROOT_DIR, "db_manager", "config.py")
+load_dotenv(os.path.join(ROOT_DIR, "db_manager", ".env"))
 
-# Custom CSS
+API_KEY = os.getenv("KITE_API_KEY")
+API_SECRET = os.getenv("KITE_API_SECRET")
+ACCESS_TOKEN_FILE = os.path.join(ROOT_DIR, "db_manager", "access_token.txt")
+
+# Styling
 st.markdown("""
     <style>
-    .project-header {
-        padding: 15px; border-radius: 8px; margin-bottom: 20px;
-    }
-    .status-badge {
-        padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 0.8rem;
-    }
+    .stApp { background-color: #0b0e14; }
+    .header-box { background: linear-gradient(90deg, #1c1c2b, #2d2d44); padding: 1.5rem; border-radius: 12px; margin-bottom: 1.5rem; border: 1px solid #3e3e5e; }
+    .stButton>button { height: 3.5rem; font-size: 1.1rem; font-weight: bold; border-radius: 10px; }
+    .sidebar-section { background: #161625; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
+    
+    /* Sidebar Compact Style */
+    [data-testid="stSidebar"] { font-size: 0.85rem; }
+    [data-testid="stSidebar"] .stMarkdown p { font-size: 0.85rem; }
+    [data-testid="stSidebar"] label { font-size: 0.8rem !important; font-weight: 600 !important; }
     </style>
 """, unsafe_allow_html=True)
 
-def get_project_config(project_name):
-    config_path = os.path.join(PROJECTS[project_name]["path"], "db_manager", "config.py")
-    config_data = {}
-    if os.path.exists(config_path):
-        with open(config_path, "r") as f:
-            lines = f.readlines()
-            for line in lines:
+def get_config():
+    cfg = {}
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH, "r") as f:
+            for line in f:
                 if "=" in line and not line.startswith("#"):
                     parts = line.split("=")
-                    key = parts[0].strip()
-                    val = parts[1].strip().strip('"').strip("'")
-                    config_data[key] = val
-    return config_data
+                    k, v = parts[0].strip(), "=".join(parts[1:]).strip().strip('"').strip("'")
+                    cfg[k] = v
+    return cfg
 
-def update_project_config(project_name, key, value):
-    config_path = os.path.join(PROJECTS[project_name]["path"], "db_manager", "config.py")
-    if os.path.exists(config_path):
-        with open(config_path, "r") as f:
-            lines = f.readlines()
-        
+def update_config(k, v):
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH, "r") as f: lines = f.readlines()
         new_lines = []
+        found = False
         for line in lines:
-            if line.startswith(f"{key} =") or line.startswith(f"{key}="):
-                if isinstance(value, str):
-                    new_lines.append(f"{key} = '{value}'\n")
-                else:
-                    new_lines.append(f"{key} = {value}\n")
-            else:
-                new_lines.append(line)
-        
-        with open(config_path, "w") as f:
-            f.writelines(new_lines)
+            if line.strip().startswith(f"{k} =") or line.strip().startswith(f"{k}="):
+                new_lines.append(f"{k} = '{v}'\n" if isinstance(v, str) else f"{k} = {v}\n")
+                found = True
+            else: new_lines.append(line)
+        if not found: new_lines.append(f"{k} = '{v}'\n" if isinstance(v, str) else f"{k} = {v}\n")
+        with open(CONFIG_PATH, "w") as f: f.writelines(new_lines)
 
-def get_db_connection(config_data):
-    try:
-        # These should be in your .env or root config, but for now we use defaults
-        # Better: Dashboard has its own .env for DB credentials
-        from dotenv import load_dotenv
-        load_dotenv(os.path.join(ROOT_DIR, ".env"))
-        
-        conn = mysql.connector.connect(
-            host=os.getenv("DB_HOST", "localhost"),
-            user=os.getenv("DB_USER", "root"),
-            password=os.getenv("DB_PASSWORD", ""),
-            database=config_data.get("DB_NAME", "trading_bot")
-        )
-        return conn
-    except:
-        return None
+cfg = get_config()
+bot_active = is_bot_running() if 'is_bot_running' in globals() else False
 
-def is_project_running(project_name):
-    # Check session state for process
-    if f"proc_{project_name}" in st.session_state:
-        proc = st.session_state[f"proc_{project_name}"]
-        if proc.poll() is None:
-            return True
+# --- SIDEBAR: ALL PARAMETERS ---
+with st.sidebar:
+    st.title("🧪 Lab Controls")
+    
+    with st.expander("🔑 Authentication", expanded=not os.path.exists(ACCESS_TOKEN_FILE)):
+        if API_KEY and API_SECRET:
+            kite = KiteConnect(api_key=API_KEY)
+            if st.button("🔗 Generate Login URL", use_container_width=True):
+                st.code(kite.login_url())
+            req_token = st.text_input("Request Token")
+            if st.button("✅ Save Session", use_container_width=True):
+                try:
+                    data = kite.generate_session(req_token, api_secret=API_SECRET)
+                    with open(ACCESS_TOKEN_FILE, "w") as f: f.write(data["access_token"])
+                    st.success("Session Ready!")
+                except Exception as e: st.error(str(e))
+        else: st.error("Keys missing in .env")
+
+    st.divider()
+    
+    # Strategy Selection
+    st.subheader("🛠️ Core Settings")
+    strat = st.selectbox("Strategy", ["GREEN", "RSI"], index=0 if cfg.get('ACTIVE_STRATEGY')=='GREEN' else 1)
+    if strat != cfg.get('ACTIVE_STRATEGY'): update_config('ACTIVE_STRATEGY', strat); st.rerun()
+    
+    tf = st.selectbox("Timeframe", ["minute", "5minute", "15minute", "30minute", "60minute", "day"], index=["minute", "5minute", "15minute", "30minute", "60minute", "day"].index(cfg.get('TIMEFRAME', 'minute')))
+    if tf != cfg.get('TIMEFRAME'): update_config('TIMEFRAME', tf); st.rerun()
+
+    qty = st.number_input("Default Quantity", int(cfg.get('DEFAULT_QTY', 1)))
+    if qty != int(cfg.get('DEFAULT_QTY', 1)): update_config('DEFAULT_QTY', qty)
+
+    # Performance Config
+    with st.expander("📈 Target / SL / Slippage"):
+        if strat == "GREEN":
+            t = st.number_input("Target %", float(cfg.get('TARGET', 0.5)), step=0.1)
+            if t != float(cfg.get('TARGET', 0.5)): update_config('TARGET', t)
+            sl = st.number_input("Stoploss %", float(cfg.get('STOPLOSS', 0.5)), step=0.1)
+            if sl != float(cfg.get('STOPLOSS', 0.5)): update_config('STOPLOSS', sl)
+        else:
+            bl = st.number_input("RSI Buy Level", int(cfg.get('BUY_LEVEL', 30)))
+            if bl != int(cfg.get('BUY_LEVEL', 30)): update_config('BUY_LEVEL', bl)
+            sl_l = st.number_input("RSI Sell Level", int(cfg.get('SELL_LEVEL', 70)))
+            if sl_l != int(cfg.get('SELL_LEVEL', 70)): update_config('SELL_LEVEL', sl_l)
+        
+        st.divider()
+        bs = st.number_input("Buy Slippage %", float(cfg.get('BUY_SLIPPAGE', 0.05)), step=0.01)
+        if bs != float(cfg.get('BUY_SLIPPAGE', 0.05)): update_config('BUY_SLIPPAGE', bs)
+        st.divider()
+        ss = st.number_input("Sell Slippage %", float(cfg.get('SELL_SLIPPAGE', 0.05)), step=0.01)
+        if ss != float(cfg.get('SELL_SLIPPAGE', 0.05)): update_config('SELL_SLIPPAGE', ss)
+        
+    # Strategy-Specific Lookback
+    lb_key = f"LOOKBACK_DAYS_{strat}"
+    lb_val = float(cfg.get(lb_key, 0.5 if strat == "GREEN" else 2.0))
+    lb = st.slider(f"Signal Lookback ({strat})", 0.1, 10.0, lb_val, step=0.1)
+    if lb != lb_val: update_config(lb_key, lb)
+
+# Helper for PID
+def check_pid():
+    if "bot_pid" in st.session_state:
+        pid = st.session_state["bot_pid"]
+        if psutil.pid_exists(pid):
+            p = psutil.Process(pid)
+            if p.status() != psutil.STATUS_ZOMBIE: return True
     return False
 
-def start_project(project_name):
-    path = PROJECTS[project_name]["path"]
-    runner = os.path.join(path, "main_runner.py")
-    # Start as subprocess
-    # We use sys.executable to ensure same python environment
-    proc = subprocess.Popen([sys.executable, runner], cwd=path)
-    st.session_state[f"proc_{project_name}"] = proc
+bot_active = check_pid()
+bot_running_flag = str(cfg.get('BOT_RUNNING', 'False')).lower() == 'true'
 
-def stop_project(project_name):
-    if f"proc_{project_name}" in st.session_state:
-        proc = st.session_state[f"proc_{project_name}"]
-        proc.terminate()
-        del st.session_state[f"proc_{project_name}"]
+# --- MAIN INTERFACE ---
+tab_paper, tab_backtest = st.tabs(["⚡ PAPER TRADING TERMINAL", "📊 EXTENDED BACKTEST LAB"])
 
-# --- KITE AUTH (Shared across projects) ---
-st.sidebar.markdown("### 🔐 Kite Central Auth")
-ACCESS_TOKEN_FILE = os.path.join(ROOT_DIR, "access_token.txt")
-# Read API keys from root .env
-from dotenv import load_dotenv
-load_dotenv(os.path.join(ROOT_DIR, ".env"))
-API_KEY = os.getenv("KITE_API_KEY")
-API_SECRET = os.getenv("KITE_API_SECRET")
-
-if os.path.exists(ACCESS_TOKEN_FILE):
-    with open(ACCESS_TOKEN_FILE, "r") as f:
-        token = f.read().strip()
-    if token:
-        st.sidebar.success("Kite Session Active")
-        if st.sidebar.button("Logout / Clear Session"):
-            os.remove(ACCESS_TOKEN_FILE)
+# --- TAB 1: PAPER TRADING ---
+with tab_paper:
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 1.5])
+    with c1:
+        if st.button("▶️ START PAPER", use_container_width=True, type="primary"):
+            update_config("BOT_RUNNING", True)
+            runner = os.path.join(ROOT_DIR, "main_runner.py")
+            proc = subprocess.Popen([sys.executable, runner], cwd=ROOT_DIR)
+            st.session_state["bot_pid"] = proc.pid
             st.rerun()
-else:
-    from kiteconnect import KiteConnect
-    kite = KiteConnect(api_key=API_KEY)
-    st.sidebar.info("No active session found.")
-    st.sidebar.markdown(f"[🔗 Get Login URL]({kite.login_url()})")
-    req_token = st.sidebar.text_input("Enter Request Token", type="password")
-    if st.sidebar.button("Generate Session"):
+    with c2:
+        if st.button("⏸️ STOP SCAN", use_container_width=True):
+            update_config("BOT_RUNNING", False); st.rerun()
+    with c3:
+        if st.button("🛑 TERMINATE", use_container_width=True):
+            if "bot_pid" in st.session_state:
+                pid = st.session_state["bot_pid"]
+                if psutil.pid_exists(pid):
+                    p = psutil.Process(pid)
+                    for child in p.children(recursive=True): child.kill()
+                    p.kill()
+                del st.session_state["bot_pid"]
+            update_config("BOT_RUNNING", False); st.rerun()
+    with c4:
+        status_color = "#238636" if (bot_active and bot_running_flag) else ("#d29922" if bot_active else "#da3633")
+        status_text = "ACTIVE" if (bot_active and bot_running_flag) else ("IDLE (Wait Exits)" if bot_active else "OFFLINE")
+        st.markdown(f'<div style="text-align:center; padding:15px; border-radius:10px; background:{status_color}22; border:1px solid {status_color}; color:{status_color}; font-weight:bold; font-size:1.1rem;">{status_text}</div>', unsafe_allow_html=True)
+
+    st.divider()
+    col_mon, col_data = st.columns([1.5, 1])
+    with col_mon:
+        st.subheader("📋 Monitor")
         try:
-            data = kite.generate_session(req_token, api_secret=API_SECRET)
-            with open(ACCESS_TOKEN_FILE, "w") as f:
-                f.write(data["access_token"])
-            st.sidebar.success("Session Saved!")
+            conn = mysql.connector.connect(host=cfg.get("DB_HOST", "localhost"), user=cfg.get("DB_USER", "root"), password=cfg.get("DB_PASSWORD", ""), database=cfg.get("DB_NAME", "trading_bot_backtest"))
+            df_open = pd.read_sql("SELECT symbol, buyprice, buytime, strategy FROM symbols_state WHERE isExecuted=1", conn)
+            st.dataframe(df_open, use_container_width=True, height=350)
+            conn.close()
+        except: st.error("MySQL Error")
+    with col_data:
+        st.subheader("📈 Signals")
+        cache_file = os.path.join(ROOT_DIR, "live_df_cache.pkl")
+        if os.path.exists(cache_file):
+            with open(cache_file, "rb") as f: data = pickle.load(f)
+            if data:
+                sym = st.selectbox("Symbol", list(data.keys()))
+                st.dataframe(data[sym].tail(20), use_container_width=True)
+
+# --- TAB 2: EXTENDED BACKTEST ---
+with tab_backtest:
+    st.subheader("🧪 Professional Backtest Engine")
+    c_bt1, c_bt2 = st.columns([1, 2])
+    with c_bt1:
+        st.write("Select Backtest Range")
+        days = st.slider("Historical Days (Extended Range)", 1, 300, 30)
+        if st.button("🚀 RUN EXTENDED BACKTEST", use_container_width=True):
+            with st.spinner(f"Fetching {days} days of data and simulating..."):
+                subprocess.run([sys.executable, os.path.join(ROOT_DIR, "backtest_engine.py"), str(days)], cwd=ROOT_DIR)
+            st.success("Analysis Complete!")
             st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"Error: {e}")
 
-st.sidebar.divider()
+    with c_bt2:
+        st.warning("⚡ EXTENDED MODE: Engine will automatically handle data chunks for ranges over 60 days.")
+        st.info("💡 Results will show exact Entry/Exit timestamps and PnL based on the Sidebar configuration.")
 
-tabs = st.tabs(["🚀 PROJECT GREEN", "🔥 PROJECT RSI"])
+    st.divider()
+    st.subheader("📜 Historical Trade Log")
+    try:
+        conn = mysql.connector.connect(host=cfg.get("DB_HOST", "localhost"), user=cfg.get("DB_USER", "root"), password=cfg.get("DB_PASSWORD", ""), database=cfg.get("DB_NAME", "trading_bot_backtest"))
+        df_hist = pd.read_sql("SELECT symbol, buytime, buyprice, selltime, sellprice, pnl, reason, strategy FROM trades_log ORDER BY id DESC LIMIT 100", conn)
+        st.dataframe(df_hist, use_container_width=True, height=400)
+        if not df_hist.empty:
+            total_pnl = df_hist['pnl'].sum()
+            st.metric("Aggregate Session PnL", f"₹{total_pnl:,.2f}", delta=f"{total_pnl:.2f}")
+        conn.close()
+    except: st.info("Run an analysis to see history.")
 
-for i, p_name in enumerate(["GREEN", "RSI"]):
-    with tabs[i]:
-        cfg = get_project_config(p_name)
-        is_running = is_project_running(p_name)
-        
-        # Header
-        color = PROJECTS[p_name]["color"]
-        st.markdown(f"""
-            <div class="project-header" style="background: linear-gradient(90deg, #12141e 0%, {color}22 100%); border-left: 5px solid {color};">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h2 style="margin: 0; color: {color};">Project {p_name}</h2>
-                    <span class="status-badge" style="background: {'#00ff0022' if is_running else '#ff000022'}; color: {'#00ff00' if is_running else '#ff0000'}; border: 1px solid {'#00ff00' if is_running else '#ff0000'};">
-                        {'● RUNNING' if is_running else '○ STOPPED'}
-                    </span>
-                </div>
-                <p style="color: #999; margin: 5px 0 0 0;">Database: <code>{cfg.get('DB_NAME', 'Unknown')}</code></p>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        # Controls
-        c1, c2, c3 = st.columns([1, 1, 2])
-        if not is_running:
-            if c1.button(f"▶️ START {p_name}", use_container_width=True, type="primary"):
-                start_project(p_name)
-                st.rerun()
-        else:
-            if c1.button(f"⏹️ STOP {p_name}", use_container_width=True):
-                stop_project(p_name)
-                st.rerun()
-        
-        # Quick Config
-        with st.expander("⚙️ Strategy Parameters"):
-            st.info(f"Edits will take effect after restarting Project {p_name}")
-            col1, col2 = st.columns(2)
-            
-            if p_name == "GREEN":
-                t = col1.number_input("Target%", value=float(cfg.get('TARGET', 0.5)), step=0.1, key=f"t_{p_name}")
-                if t != float(cfg.get('TARGET', 0.5)): update_project_config(p_name, 'TARGET', t)
-                
-                sl = col1.number_input("Stoploss%", value=float(cfg.get('STOPLOSS', 0.5)), step=0.1, key=f"sl_{p_name}")
-                if sl != float(cfg.get('STOPLOSS', 0.5)): update_project_config(p_name, 'STOPLOSS', sl)
-            else:
-                rb = col1.number_input("RSI Buy", value=int(cfg.get('BUY_LEVEL', 30)), key=f"rb_{p_name}")
-                if rb != int(cfg.get('BUY_LEVEL', 30)): update_project_config(p_name, 'BUY_LEVEL', rb)
-                
-                rs = col1.number_input("RSI Sell", value=int(cfg.get('SELL_LEVEL', 70)), key=f"rs_{p_name}")
-                if rs != int(cfg.get('SELL_LEVEL', 70)): update_project_config(p_name, 'SELL_LEVEL', rs)
-
-        st.divider()
-        m1, m2 = st.columns([2, 1])
-        with m1:
-            st.markdown("### 📡 Live Database View")
-            conn = get_db_connection(cfg)
-            if conn:
-                try:
-                    # Show Open Positions
-                    st.markdown("**🟢 Active Open Positions**")
-                    df_p = pd.read_sql("SELECT symbol, instrument_token, buyprice, buytime FROM symbols_state WHERE isExecuted=1", conn)
-                    if not df_p.empty:
-                        # Fetch Live PNL for open positions
-                        if os.path.exists(ACCESS_TOKEN_FILE):
-                            try:
-                                with open(ACCESS_TOKEN_FILE, "r") as f: k_token = f.read().strip()
-                                from kiteconnect import KiteConnect
-                                k_app = KiteConnect(api_key=API_KEY)
-                                k_app.set_access_token(k_token)
-                                
-                                tokens_to_fetch = [int(t) for t in df_p['instrument_token'].tolist() if pd.notna(t)]
-                                if tokens_to_fetch:
-                                    quotes = k_app.quote(["NSE:" + s for s in df_p['symbol'].tolist()] + [str(t) for t in tokens_to_fetch]) # Try both symbol and token
-                                    
-                                    live_pnls = []
-                                    ltps = []
-                                    for idx, row in df_p.iterrows():
-                                        token_str = str(row['instrument_token'])
-                                        symbol_str = f"NSE:{row['symbol']}"
-                                        buy_p = float(row['buyprice'])
-                                        ltp = None
-                                        if token_str in quotes: ltp = quotes[token_str].get('last_price')
-                                        elif symbol_str in quotes: ltp = quotes[symbol_str].get('last_price')
-                                        
-                                        if ltp and buy_p > 0:
-                                            pnl = ((ltp - buy_p) / buy_p) * 100
-                                            live_pnls.append(round(pnl, 2))
-                                            ltps.append(ltp)
-                                        else:
-                                            live_pnls.append(None)
-                                            ltps.append(None)
-                                            
-                                    df_p['LTP'] = ltps
-                                    df_p['Live PNL %'] = live_pnls
-                            except Exception as e: pass # Silently fail and just show without PNL if network issue
-                        
-                        df_p = df_p.drop(columns=['instrument_token']) # Hide token from UI
-                        st.dataframe(df_p, use_container_width=True)
-                    else: st.info("No open positions right now")
-                    
-                    # Show Full Symbols State (DF)
-                    with st.expander("📋 View All Tracked Symbols"):
-                        df_all = pd.read_sql("SELECT symbol, instrument_token, mode, isExecuted FROM symbols_state", conn)
-                        if not df_all.empty: st.dataframe(df_all, use_container_width=True, height=200)
-                        else: st.info("No symbols found. Run setup_db & set_defaults first.")
-
-                    # Show Trades Log
-                    with st.expander("📜 View Trades Log (History)"):
-                        df_log = pd.read_sql("SELECT symbol, buytime, buyprice, selltime, sellprice, pnl, reason FROM trades_log ORDER BY id DESC", conn)
-                        if not df_log.empty: st.dataframe(df_log, use_container_width=True)
-                        else: st.info("No trades executed yet.")
-                        
-                    # --- NEW: CANDLE VIEWER (SPYDER IDE STYLE) ---
-                    st.markdown("### 🕯️ Live Bot Memory (Spyder View)")
-                    st.caption("Auto-refreshes with the exact DF currently in the bot's memory.")
-                    cache_file = os.path.join(PROJECTS[p_name]["path"], "live_df_cache.pkl")
-                    if os.path.exists(cache_file):
-                        try:
-                            import pickle
-                            with open(cache_file, "rb") as f:
-                                bot_df_cache = pickle.load(f)
-                            
-                            if bot_df_cache:
-                                selected_sym = st.selectbox("Select Symbol", list(bot_df_cache.keys()), key=f"sym_{p_name}")
-                                df_candles = bot_df_cache[selected_sym]
-                                st.dataframe(df_candles.tail(15), use_container_width=True)
-                            else:
-                                st.info("Bot cache is empty. Waiting for next cycle...")
-                        except Exception as e:
-                            st.warning(f"Reading cache... Please wait. ({e})")
-                    else:
-                        st.info("Bot is not running or hasn't completed its first cycle yet.")
-                    
-                    conn.close()
-                except Exception as e: 
-                    st.error(f"Database Table Error: {e}. Run setup_db.py for this project.")
-            else:
-                st.error("Could not connect to project database.")
-        
-        with m2:
-            st.markdown("### 📊 Backtest (Project Level)")
-            days = st.number_input("Days to Backtest", min_value=1, max_value=365, value=10, key=f"days_{p_name}")
-            if st.button(f"Run Backtest for {p_name}", key=f"bt_btn_{p_name}"):
-                st.warning(f"Backtest for {p_name} starting for {days} days...")
-                bt_path = os.path.join(PROJECTS[p_name]["path"], "backtest_engine.py")
-                # Run backtest_engine.py as a script. 
-                # Note: Project backtest_engine.py might need a __main__ block to accept args
-                subprocess.run([sys.executable, bt_path, str(days)], cwd=PROJECTS[p_name]["path"])
-                st.success(f"Backtest Completed! Check Excel report in {p_name} folder.")
-
-st.caption("Auto-refreshing every 5s...")
+st.caption(f"Sync: {datetime.now().strftime('%H:%M:%S')}")
 time.sleep(5)
 st.rerun()
