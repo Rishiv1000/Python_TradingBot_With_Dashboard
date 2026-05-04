@@ -193,17 +193,6 @@ for i, p_name in enumerate(["GREEN", "RSI"]):
                 
                 rs = col1.number_input("RSI Sell", value=int(cfg.get('SELL_LEVEL', 70)), key=f"rs_{p_name}")
                 if rs != int(cfg.get('SELL_LEVEL', 70)): update_project_config(p_name, 'SELL_LEVEL', rs)
-            
-            # --- GLOBAL EXECUTION LOCK ---
-            st.markdown("#### 🔒 Security")
-            current_lock = cfg.get('PAPER_TRADE', True)
-            new_lock = st.toggle("Global Execution Lock (Blocks Real Orders)", value=current_lock, key=f"lock_{p_name}")
-            if new_lock != current_lock: update_project_config(p_name, 'PAPER_TRADE', new_lock)
-            if new_lock:
-                st.warning("Lock is ON. Bot will only simulate trades (Virtual).")
-            else:
-                st.error("Lock is OFF. Bot will execute REAL ORDERS in Kite!")
-
 
         st.divider()
         m1, m2 = st.columns([2, 1])
@@ -294,8 +283,15 @@ for i, p_name in enumerate(["GREEN", "RSI"]):
                 st.error("Could not connect to project database.")
         
         with m2:
-            st.markdown("### 📊 Backtest Module")
-            st.info(f"Backtesting is disabled in the Live Environment. Use Project_Backtest_Paper to test historical data.")
+            st.markdown("### 📊 Backtest (Project Level)")
+            days = st.number_input("Days to Backtest", min_value=1, max_value=365, value=10, key=f"days_{p_name}")
+            if st.button(f"Run Backtest for {p_name}", key=f"bt_btn_{p_name}"):
+                st.warning(f"Backtest for {p_name} starting for {days} days...")
+                bt_path = os.path.join(PROJECTS[p_name]["path"], "backtest_engine.py")
+                # Run backtest_engine.py as a script. 
+                # Note: Project backtest_engine.py might need a __main__ block to accept args
+                subprocess.run([sys.executable, bt_path, str(days)], cwd=PROJECTS[p_name]["path"])
+                st.success(f"Backtest Completed! Check Excel report in {p_name} folder.")
 
 st.caption("Auto-refreshing every 5s...")
 time.sleep(5)

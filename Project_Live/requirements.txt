@@ -1,5 +1,0 @@
-kiteconnect==5.0.1
-streamlit
-pandas
-mysql-connector-python
-python-dotenv

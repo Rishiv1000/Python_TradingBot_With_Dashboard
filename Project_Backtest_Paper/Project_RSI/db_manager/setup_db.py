@@ -46,6 +46,22 @@ def setup_database():
                 buy_order_id VARCHAR(100), sell_order_id VARCHAR(100), mode VARCHAR(20)
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS backtest_reports (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                symbol VARCHAR(60),
+                buytime DATETIME,
+                buyprice FLOAT,
+                selltime DATETIME,
+                sellprice FLOAT,
+                pnl FLOAT,
+                reason VARCHAR(100),
+                slippage FLOAT,
+                buy_order_id VARCHAR(100),
+                sell_order_id VARCHAR(100),
+                mode VARCHAR(20)
+            )
+        """)
         conn.commit(); conn.close()
         print("🚀 Database Setup Complete!")
     except Exception as e:

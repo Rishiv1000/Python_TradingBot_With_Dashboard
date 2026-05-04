@@ -28,35 +28,27 @@ class EntryEngine:
             effective_start = last_sell_time
         from engine_symbol_data import _interval_minutes
         from datetime import timedelta
-        interval = _interval_minutes()
+        interval = _interval_minutes(getattr(config, 'TIMEFRAME', 'minute'))
         new_candles = df[df["date"] + timedelta(minutes=interval) > effective_start]
         if len(new_candles) < 2: return False
         last_two_completed = df.iloc[-2:]
         if all(last_two_completed["date"] + timedelta(minutes=interval) > effective_start):
             return all(last_two_completed["candle_color"] == "GREEN")
         return False
-
-    def place_real_buy(self, symbol, quantity, exchange):
-        try:
-            ltp_data = self.kite.ltp(f"{exchange}:{symbol}")
-            ltp = ltp_data[f"{exchange}:{symbol}"]["last_price"]
-            limit_price = round(ltp * (1 + getattr(config, 'BUY_SLIPPAGE_BUFFER', 0.05) / 100), 1) 
-            return self.kite.place_order(
-                variety=self.kite.VARIETY_REGULAR, exchange=exchange, tradingsymbol=symbol, 
-                transaction_type=self.kite.TRANSACTION_TYPE_BUY, quantity=quantity, 
-                order_type=self.kite.ORDER_TYPE_LIMIT, price=limit_price, product=self.kite.PRODUCT_MIS,
-            )
-        except Exception as e:
-            print(f"BUY Order Failed for {symbol}: {e}")
-            return None
+ 
+    def fake_place_order(self, symbol, quantity, exchange):
+        print(f"🚫 SIMULATED REAL BUY: You are on BackTest Module. Real Order Blocked for {symbol}.")
+        return f"FORCED-REAL-BUY-{symbol}-{int(time.time())}"
 
     def perform_buy(self, symbol, token, exchange, buy_price, buy_time):
         mode = "PAPER" if self.paper_trade else "REAL"
-        final_buy_price = buy_price
-        if self.paper_trade:
+        # Apply Paper Buy Buffer
+        final_buy_price = buy_price * (1 + getattr(config, 'BUY_SLIPPAGE', 0.05) / 100)
+        
+        if self.paper_trade: 
             order_id = f"PAPER-BUY-{symbol}-{int(time.time())}"
         else:
-            order_id = self.place_real_buy(symbol, quantity=getattr(config, 'DEFAULT_QTY', 1), exchange=exchange)
+            order_id = self.fake_place_order(symbol, quantity=getattr(config, 'DEFAULT_QTY', 1), exchange=exchange)
             if not order_id: return
             try:
                 time.sleep(1)
@@ -84,11 +76,14 @@ class EntryEngine:
             row = cursor.fetchone(); conn.close()
             if not row or row["isExecuted"] == 1: continue
             try:
-                records = fetch_symbol_candles(self.kite, token, days=getattr(config, 'CANDLE_LOOKBACK_DAYS', 5))
+                records = fetch_symbol_candles(self.kite, token, timeframe=getattr(config, 'TIMEFRAME', 'minute'), days=getattr(config, 'LOOKBACK_DAYS', 5))
                 if not records: continue
                 new_df = build_symbol_dataframe(records)
                 update_symbol_dataframe_cache(self.df_cache, symbol, new_df)
                 df = self.df_cache[symbol]
+                
+                # --- LIVE PROCESSING LOG FOR TERMINAL ---
+                last_row = df.iloc[-1]
             except Exception as e:
                 print(f"Error fetching {symbol}: {e}")
                 continue
@@ -96,6 +91,16 @@ class EntryEngine:
                 buy_price = float(df.iloc[-1]["close"])
                 buy_time = df.iloc[-1]["date"]
                 self.perform_buy(symbol, token, exchange, buy_price, buy_time)
+                
+        # Dump memory cache for Dashboard (Spyder-like view)
+        try:
+            import pickle
+            cache_file = os.path.join(os.path.dirname(__file__), "live_df_cache.pkl")
+            temp_file = cache_file + ".tmp"
+            with open(temp_file, "wb") as f:
+                pickle.dump(self.df_cache, f)
+            os.replace(temp_file, cache_file)
+        except Exception as e: pass
 
 def run_entry_cycle(kite, df_cache, paper_trade=None):
     engine = EntryEngine(kite, df_cache, paper_trade)
