@@ -65,11 +65,20 @@ def fetch_symbol_candles(kite, token, days=None, timeframe=None):
     return data_list
 
 def calculate_rsi(df, period=14):
+    if df.empty or len(df) < period: return df
     delta = df['close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    # Using Wilder's Smoothing (standard for TradingView/Zerodha)
+    gain = (delta.where(delta > 0, 0)).ewm(alpha=1/period, adjust=False).mean()
+    loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/period, adjust=False).mean()
     rs = gain / loss
     df['rsi'] = 100 - (100 / (1 + rs))
+    return df
+
+def calculate_candle_color(df):
+    """Calculates candle color (GREEN, RED, DOJI) using vectorized operations."""
+    df["candle_color"] = "DOJI"
+    df.loc[df["close"] > df["open"], "candle_color"] = "GREEN"
+    df.loc[df["close"] < df["open"], "candle_color"] = "RED"
     return df
 
 def build_symbol_dataframe(records):
@@ -78,15 +87,10 @@ def build_symbol_dataframe(records):
     df["date"] = (pd.to_datetime(df["date"], utc=True).dt.tz_convert("Asia/Kolkata").dt.tz_localize(None))
     df = df.sort_values("date").drop_duplicates(subset=["date"], keep="last")
     
-    # Calculate RSI
+    # Indicators
     df = calculate_rsi(df)
-
-    def calculate_color(row):
-        diff = row["close"] - row["open"]
-        if diff > 0: return "GREEN"
-        elif diff < 0: return "RED"
-        else: return "DOJI"
-    df["candle_color"] = df.apply(calculate_color, axis=1)
+    df = calculate_candle_color(df)
+    
     return df
 
 def update_symbol_dataframe_cache(cache, symbol, df):

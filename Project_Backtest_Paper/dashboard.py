@@ -65,7 +65,7 @@ def update_config(k, v):
 cfg = get_config()
 bot_active = is_bot_running() if 'is_bot_running' in globals() else False
 
-# --- SIDEBAR: ALL PARAMETERS ---
+# --- SIDEBAR: AUTH & STATUS ---
 with st.sidebar:
     st.title("🧪 Lab Controls")
     
@@ -84,21 +84,40 @@ with st.sidebar:
         else: st.error("Keys missing in .env")
 
     st.divider()
-    
-    # Strategy Selection
-    st.subheader("🛠️ Core Settings")
-    strat = st.selectbox("Strategy", ["GREEN", "RSI"], index=0 if cfg.get('ACTIVE_STRATEGY')=='GREEN' else 1)
-    if strat != cfg.get('ACTIVE_STRATEGY'): update_config('ACTIVE_STRATEGY', strat); st.rerun()
-    
-    tf = st.selectbox("Timeframe", ["minute", "5minute", "15minute", "30minute", "60minute", "day"], index=["minute", "5minute", "15minute", "30minute", "60minute", "day"].index(cfg.get('TIMEFRAME', 'minute')))
-    if tf != cfg.get('TIMEFRAME'): update_config('TIMEFRAME', tf); st.rerun()
+    st.markdown("**Lab Environment**")
+    st.info("🧪 EXTENDED BACKTEST ENABLED")
+    st.caption("Mode: MySQL Analysis")
 
-    qty = st.number_input("Default Quantity", int(cfg.get('DEFAULT_QTY', 1)))
-    if qty != int(cfg.get('DEFAULT_QTY', 1)): update_config('DEFAULT_QTY', qty)
+# --- MAIN INTERFACE ---
 
-    # Performance Config
-    with st.expander("📈 Target / SL / Slippage"):
-        if strat == "GREEN":
+
+# --- STRATEGY BAR (HORIZONTAL) ---
+sc1, sc2, sc3 = st.columns([2, 1.5, 3])
+
+with sc1:
+    current_strat = cfg.get('ACTIVE_STRATEGY', 'GREEN')
+    new_strat = st.radio("📡 **Active Strategy**", ["GREEN", "RSI"], 
+                         index=0 if current_strat == "GREEN" else 1, 
+                         horizontal=True, label_visibility="collapsed")
+    if new_strat != current_strat:
+        update_config('ACTIVE_STRATEGY', new_strat)
+        st.rerun()
+
+with sc2:
+    # --- PARAMETERS POPOVER ---
+    with st.popover("⚙️ Settings & Parameters", use_container_width=True):
+        st.subheader("🛠️ Core Settings")
+        
+        tf = st.selectbox("Timeframe", ["minute", "5minute", "15minute", "30minute", "60minute", "day"], 
+                          index=["minute", "5minute", "15minute", "30minute", "60minute", "day"].index(cfg.get('TIMEFRAME', 'minute')))
+        if tf != cfg.get('TIMEFRAME'): update_config('TIMEFRAME', tf); st.rerun()
+
+        qty = st.number_input("Default Quantity", int(cfg.get('DEFAULT_QTY', 1)))
+        if qty != int(cfg.get('DEFAULT_QTY', 1)): update_config('DEFAULT_QTY', qty)
+
+        st.divider()
+        st.subheader("📈 Strategy Parameters")
+        if new_strat == "GREEN":
             t = st.number_input("Target %", float(cfg.get('TARGET', 0.5)), step=0.1)
             if t != float(cfg.get('TARGET', 0.5)): update_config('TARGET', t)
             sl = st.number_input("Stoploss %", float(cfg.get('STOPLOSS', 0.5)), step=0.1)
@@ -112,15 +131,18 @@ with st.sidebar:
         st.divider()
         bs = st.number_input("Buy Slippage %", float(cfg.get('BUY_SLIPPAGE', 0.05)), step=0.01)
         if bs != float(cfg.get('BUY_SLIPPAGE', 0.05)): update_config('BUY_SLIPPAGE', bs)
-        st.divider()
         ss = st.number_input("Sell Slippage %", float(cfg.get('SELL_SLIPPAGE', 0.05)), step=0.01)
         if ss != float(cfg.get('SELL_SLIPPAGE', 0.05)): update_config('SELL_SLIPPAGE', ss)
-        
-    # Strategy-Specific Lookback
-    lb_key = f"LOOKBACK_DAYS_{strat}"
-    lb_val = float(cfg.get(lb_key, 0.5 if strat == "GREEN" else 2.0))
-    lb = st.slider(f"Signal Lookback ({strat})", 0.1, 10.0, lb_val, step=0.1)
-    if lb != lb_val: update_config(lb_key, lb)
+
+        lb_key = f"LOOKBACK_DAYS_{new_strat}"
+        lb_val = float(cfg.get(lb_key, 0.5 if new_strat == "GREEN" else 2.0))
+        lb = st.slider(f"Signal Lookback", 0.01, 10.0, lb_val, step=0.01)
+        if lb != lb_val: update_config(lb_key, lb)
+
+with sc3:
+    bot_active = is_bot_running() if 'is_bot_running' in globals() else False # Recalculated below but used for color
+    # Placeholder for status (will be correct after check_pid call below)
+    st.empty() 
 
 # Helper for PID
 def check_pid():
@@ -134,7 +156,13 @@ def check_pid():
 bot_active = check_pid()
 bot_running_flag = str(cfg.get('BOT_RUNNING', 'False')).lower() == 'true'
 
-# --- MAIN INTERFACE ---
+# Update the status box in sc3
+with sc3:
+    status_color = "#238636" if (bot_active and bot_running_flag) else ("#d29922" if bot_active else "#da3633")
+    status_text = "LAB ENGINE: ACTIVE" if (bot_active and bot_running_flag) else ("LAB ENGINE: IDLE" if bot_active else "LAB ENGINE: OFFLINE")
+    st.markdown(f'<div style="text-align:center; padding:8px; border-radius:8px; background:{status_color}22; border:1px solid {status_color}; color:{status_color}; font-weight:bold;">{status_text}</div>', unsafe_allow_html=True)
+
+st.divider()
 tab_paper, tab_backtest = st.tabs(["⚡ PAPER TRADING TERMINAL", "📊 EXTENDED BACKTEST LAB"])
 
 # --- TAB 1: PAPER TRADING ---

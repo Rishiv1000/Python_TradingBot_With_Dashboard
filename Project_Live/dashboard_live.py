@@ -95,35 +95,54 @@ with st.sidebar:
         else: st.error("Keys missing in .env")
 
     st.divider()
-    st.subheader("⚙️ Strategy Settings")
-    strat = st.selectbox("Active Strategy", ["GREEN", "RSI"], index=0 if cfg.get('ACTIVE_STRATEGY')=='GREEN' else 1)
-    if strat != cfg.get('ACTIVE_STRATEGY'): update_config('ACTIVE_STRATEGY', strat); st.rerun()
-    
-    if strat == "GREEN":
-        t = st.number_input("Target %", float(cfg.get('TARGET', 0.5)), step=0.1)
-        if t != float(cfg.get('TARGET', 0.5)): update_config('TARGET', t)
-        sl = st.number_input("Stoploss %", float(cfg.get('STOPLOSS', 0.5)), step=0.1)
-        if sl != float(cfg.get('STOPLOSS', 0.5)): update_config('STOPLOSS', sl)
-    else:
-        bl = st.number_input("RSI Buy", int(cfg.get('BUY_LEVEL', 30)))
-        if bl != int(cfg.get('BUY_LEVEL', 30)): update_config('BUY_LEVEL', bl)
-        sl_l = st.number_input("RSI Sell", int(cfg.get('SELL_LEVEL', 70)))
-        if sl_l != int(cfg.get('SELL_LEVEL', 70)): update_config('SELL_LEVEL', sl_l)
-
-    # Strategy-Specific Lookback
-    lb_key = f"LOOKBACK_DAYS_{strat}"
-    lb_val = float(cfg.get(lb_key, 0.5 if strat == "GREEN" else 2.0))
-    lb = st.slider(f"Signal Lookback ({strat})", 0.1, 10.0, lb_val, step=0.1)
-    if lb != lb_val: update_config(lb_key, lb)
-
-    st.divider()
     st.markdown("**Environment Status**")
     if is_live: st.error("🚀 REAL TRADING ACTIVE")
-    else: st.info("🛡️ GLOBLE LOCK ON")
-    st.caption("Mode managed via backend config.py")
+    else: st.info("🛡️ PAPER TRADING")
+    
+    st.caption(f"Last Sync: {datetime.now().strftime('%H:%M:%S')}")
+    st.caption("Auto-refreshing every 5s")
 
 # --- MAIN INTERFACE ---
-st.markdown(f'<div class="header-box"><h1 style="margin:0; color:#c9d1d9;">Trading Terminal Pro | {"LIVE EXECUTION" if is_live else "PAPER TRADING"}</h1></div>', unsafe_allow_html=True)
+
+
+# --- STRATEGY BAR (HORIZONTAL) ---
+sc1, sc2, sc3 = st.columns([2, 1.5, 3])
+
+with sc1:
+    current_strat = cfg.get('ACTIVE_STRATEGY', 'GREEN')
+    new_strat = st.radio("📡 **Active Strategy**", ["GREEN", "RSI"], 
+                         index=0 if current_strat == "GREEN" else 1, 
+                         horizontal=True, label_visibility="collapsed")
+    if new_strat != current_strat:
+        update_config('ACTIVE_STRATEGY', new_strat)
+        st.rerun()
+
+with sc2:
+    # --- PARAMETERS POPOVER ---
+    with st.popover("⚙️ Edit Parameters", use_container_width=True):
+        st.subheader(f"Settings for {new_strat}")
+        if new_strat == "GREEN":
+            t = st.number_input("Target %", float(cfg.get('TARGET', 0.5)), step=0.1)
+            if t != float(cfg.get('TARGET', 0.5)): update_config('TARGET', t)
+            sl = st.number_input("Stoploss %", float(cfg.get('STOPLOSS', 0.5)), step=0.1)
+            if sl != float(cfg.get('STOPLOSS', 0.5)): update_config('STOPLOSS', sl)
+        else:
+            bl = st.number_input("RSI Buy Level", int(cfg.get('BUY_LEVEL', 30)))
+            if bl != int(cfg.get('BUY_LEVEL', 30)): update_config('BUY_LEVEL', bl)
+            sl_l = st.number_input("RSI Sell Level", int(cfg.get('SELL_LEVEL', 70)))
+            if sl_l != int(cfg.get('SELL_LEVEL', 70)): update_config('SELL_LEVEL', sl_l)
+        
+        lb_key = f"LOOKBACK_DAYS_{new_strat}"
+        lb_val = float(cfg.get(lb_key, 0.5 if new_strat == "GREEN" else 2.0))
+        lb = st.slider(f"Signal Lookback", 0.01, 10.0, lb_val, step=0.01)
+        if lb != lb_val: update_config(lb_key, lb)
+
+with sc3:
+    status_color = "#238636" if (bot_active and bot_running_flag) else ("#d29922" if bot_active else "#da3633")
+    status_text = "ENGINE: RUNNING" if (bot_active and bot_running_flag) else ("ENGINE: STOPPING" if bot_active else "ENGINE: IDLE")
+    st.markdown(f'<div style="text-align:center; padding:8px; border-radius:8px; background:{status_color}22; border:1px solid {status_color}; color:{status_color}; font-weight:bold;">{status_text}</div>', unsafe_allow_html=True)
+
+st.divider()
 
 # Three Buttons Row
 c1, c2, c3, c4 = st.columns([1, 1, 1, 1.5])

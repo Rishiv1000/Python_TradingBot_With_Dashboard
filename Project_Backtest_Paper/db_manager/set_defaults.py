@@ -6,8 +6,8 @@ import time
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from kite_connector import generate_or_load_session
-from symbol_data_engine import search_kite_symbol
+from main_runner import generate_or_load_session
+from engine_symbol_data import search_kite_symbol
 from db_manager.config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 
 def fill_missing_tokens_and_reset():

@@ -26,6 +26,28 @@ def generate_or_load_session():
     print("❌ No valid Kite session. Please login via Dashboard.")
     sys.exit(1)
 
+def smart_sleep(timeframe):
+    """Wait until 3 seconds before the next candle boundary."""
+    from engine_symbol_data import _interval_minutes
+    try:
+        interval = _interval_minutes(timeframe)
+        now = datetime.now()
+        
+        # Calculate seconds until next boundary
+        total_seconds = now.hour * 3600 + now.minute * 60 + now.second
+        next_boundary_seconds = ((total_seconds // (interval * 60)) + 1) * (interval * 60)
+        
+        sleep_time = next_boundary_seconds - total_seconds - 3 # Wake up 3s early
+        
+        if sleep_time < 0: # If we are already within the 3s window
+            sleep_time = (interval * 60) + sleep_time 
+            
+        print(f"⏳ Sleeping for {int(sleep_time)}s until next cycle (3s before candle close)...")
+        time.sleep(sleep_time)
+    except Exception as e:
+        print(f"⚠️ Smart Sleep Error: {e}")
+        time.sleep(60)
+
 def main():
     print("🚀 Starting Trading Engine...")
     kite = generate_or_load_session()
@@ -48,6 +70,7 @@ def main():
 
     # --- ENTRY LOOP ---
     df_cache = {}
+    import pickle
     while True:
         try:
             # Check for strategy changes dynamically
@@ -72,10 +95,8 @@ def main():
             else:
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Bot is STOPPED (Graceful). Scanning skipped.")
             
-            # Simple wait based on timeframe
-            timeframe = getattr(config, "TIMEFRAME", 'minute')
-            wait_seconds = 60 if timeframe == "minute" else 300
-            time.sleep(wait_seconds)
+            # Smart Wait
+            smart_sleep(getattr(config, "TIMEFRAME", 'minute'))
             
         except Exception as e:
             print(f"⚠️ Error in cycle: {e}")
