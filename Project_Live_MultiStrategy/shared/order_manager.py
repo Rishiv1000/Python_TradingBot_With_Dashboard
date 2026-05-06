@@ -7,10 +7,11 @@ def place_real_buy(kite, symbol, quantity, exchange, config):
         return f"SIMULATED-BUY-{symbol}-{int(time.time())}"
 
     try:
-        instrument = f"{exchange.upper()}:{symbol.upper()}"
-        ltp = kite.ltp(instrument)[instrument]["last_price"]
-        slippage = getattr(config, "BUY_SLIPPAGE", 0.10)
+        instrument  = f"{exchange.upper()}:{symbol.upper()}"
+        ltp         = kite.ltp(instrument)[instrument]["last_price"]
+        slippage    = getattr(config, "BUY_SLIPPAGE", 0.10)
         limit_price = round(ltp * (1 + slippage / 100), 1)
+
         order_id = kite.place_order(
             variety=kite.VARIETY_REGULAR,
             exchange=exchange.upper(),
@@ -21,10 +22,10 @@ def place_real_buy(kite, symbol, quantity, exchange, config):
             price=limit_price,
             product=kite.PRODUCT_MIS,
         )
-        print(f"BUY order placed: {symbol} @ {limit_price} ({order_id})")
+        print(f"✅ BUY order placed: {symbol} @ {limit_price} | order_id: {order_id}")
         return order_id
     except Exception as e:
-        print(f"BUY order failed for {symbol}: {e}")
+        print(f"❌ BUY order failed for {symbol}: {e}")
         return None
 
 
@@ -34,10 +35,11 @@ def place_real_sell(kite, symbol, quantity, exchange, product, config, tag=None)
         return f"SIMULATED-SELL-{symbol}-{int(time.time())}"
 
     try:
-        instrument = f"{exchange.upper()}:{symbol.upper()}"
-        ltp = kite.ltp(instrument)[instrument]["last_price"]
-        slippage = getattr(config, "SELL_SLIPPAGE", 0.10)
+        instrument  = f"{exchange.upper()}:{symbol.upper()}"
+        ltp         = kite.ltp(instrument)[instrument]["last_price"]
+        slippage    = getattr(config, "SELL_SLIPPAGE", 0.10)
         limit_price = round(ltp * (1 - slippage / 100), 1)
+
         order_id = kite.place_order(
             variety=kite.VARIETY_REGULAR,
             exchange=exchange.upper(),
@@ -49,8 +51,8 @@ def place_real_sell(kite, symbol, quantity, exchange, product, config, tag=None)
             product=product,
             tag=str(tag)[:20] if tag else None,
         )
-        print(f"SELL order placed: {symbol} @ {limit_price} ({order_id})")
+        print(f"✅ SELL order placed: {symbol} @ {limit_price} | order_id: {order_id}")
         return order_id
     except Exception as e:
-        print(f"SELL order failed for {symbol}: {e}")
+        print(f"❌ SELL order failed for {symbol}: {e}")
         return None

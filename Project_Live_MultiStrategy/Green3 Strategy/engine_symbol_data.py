@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 
 import mysql.connector
 
@@ -15,7 +14,6 @@ from shared.candle_data import (
 )
 
 # ── In-memory symbol cache ────────────────────────────────────────────────────
-# Loaded once at startup, refreshed when RELOAD_SIGNAL_FILE exists
 RELOAD_SIGNAL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".reload_symbols")
 _symbol_cache = []
 _cache_loaded = False
@@ -30,7 +28,7 @@ def _load_symbols_from_db():
         database=config.DB_NAME,
     )
     cursor = conn.cursor(dictionary=True)
-    symbols_table = getattr(config, "SYMBOLS_TABLE", "symbols_green")
+    symbols_table = getattr(config, "SYMBOLS_TABLE", "symbols_green3")
     limit = getattr(config, "MAX_SYMBOLS_PER_CYCLE", 50)
     cursor.execute(
         f"SELECT symbol, instrument_token AS token, exchange FROM {symbols_table} LIMIT %s",
@@ -39,20 +37,19 @@ def _load_symbols_from_db():
     _symbol_cache = cursor.fetchall()
     conn.close()
     _cache_loaded = True
-    print(f"[GREEN] Symbol cache loaded: {[s['symbol'] for s in _symbol_cache]}")
+    print(f"[GREEN3] Symbol cache loaded: {[s['symbol'] for s in _symbol_cache]}")
     return _symbol_cache
 
 
 def fetch_runtime_symbols(kite):
     global _cache_loaded
-    # Check if dashboard requested a reload
     if os.path.exists(RELOAD_SIGNAL_FILE):
         try:
             os.remove(RELOAD_SIGNAL_FILE)
         except Exception:
             pass
         _cache_loaded = False
-        print("[GREEN] Symbol cache reload triggered.")
+        print("[GREEN3] Symbol cache reload triggered.")
 
     if not _cache_loaded:
         _load_symbols_from_db()
@@ -67,7 +64,7 @@ def calculate_candle_color(df):
     return df
 
 
-def build_green_dataframe(kite, token):
+def build_green3_dataframe(kite, token):
     records = fetch_symbol_candles(
         kite,
         token,

@@ -37,7 +37,7 @@ class ExitEngine:
     def _fetch_open_positions(self):
         conn = self._db_connection()
         cursor = conn.cursor(dictionary=True)
-        symbols_table = getattr(config, "SYMBOLS_TABLE", "symbols_green")
+        symbols_table = getattr(config, "SYMBOLS_TABLE", "symbols_green3")
         cursor.execute(f"SELECT * FROM {symbols_table} WHERE isExecuted=1")
         rows = cursor.fetchall()
         conn.close()
@@ -56,7 +56,7 @@ class ExitEngine:
         slippage = float(row["buyprice"]) * (getattr(config, "SELL_SLIPPAGE", 0.05) / 100)
         conn = self._db_connection()
         cursor = conn.cursor()
-        symbols_table = getattr(config, "SYMBOLS_TABLE", "symbols_green")
+        symbols_table = getattr(config, "SYMBOLS_TABLE", "symbols_green3")
         cursor.execute(
             "INSERT INTO trades_log (symbol, buytime, buyprice, selltime, sellprice, pnl, reason, slippage, buy_order_id, sell_order_id, strategy) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
@@ -70,7 +70,7 @@ class ExitEngine:
         )
         conn.commit()
         conn.close()
-        print(f"[GREEN] SOLD {row['symbol']} @ {sell_price} ({reason})")
+        print(f"[GREEN3] SOLD {row['symbol']} @ {sell_price} ({reason})")
 
     def _place_sell(self, row):
         order_id = str(row["buy_order_id"])
@@ -90,13 +90,13 @@ class ExitEngine:
         # Real order — look up from Zerodha
         try:
             if order_id == "FAILED_OR_REJECTED":
-                print(f"[GREEN] Cleaning up failed entry for {row['symbol']}.")
+                print(f"[GREEN3] Cleaning up failed entry for {row['symbol']}.")
                 return "CLEANUP"
 
             orders = self.kite.orders()
             order = next((o for o in orders if str(o["order_id"]) == order_id), None)
             if not order:
-                print(f"[GREEN] Order {order_id} not found in Zerodha orders.")
+                print(f"[GREEN3] Order {order_id} not found in Zerodha orders.")
                 return None
             return place_real_sell(
                 self.kite,
@@ -142,7 +142,7 @@ class ExitEngine:
             # Just reset the database, don't log a real trade
             conn = self._db_connection()
             cursor = conn.cursor()
-            symbols_table = getattr(config, "SYMBOLS_TABLE", "symbols_green")
+            symbols_table = getattr(config, "SYMBOLS_TABLE", "symbols_green3")
             cursor.execute(
                 f"UPDATE {symbols_table} SET isExecuted=0, buyprice=NULL, buytime=NULL, buy_order_id=NULL, product=NULL, last_sell_time=%s WHERE symbol=%s",
                 (datetime.now(), row["symbol"]),

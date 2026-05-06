@@ -1,8 +1,6 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-
 import pandas as pd
-
 
 def search_kite_symbol(kite, exchange, symbol):
     try:
@@ -14,7 +12,6 @@ def search_kite_symbol(kite, exchange, symbol):
         print(f"Search failed for {symbol}: {e}")
     return None
 
-
 def interval_minutes(timeframe):
     if timeframe == "minute":
         return 1
@@ -24,7 +21,6 @@ def interval_minutes(timeframe):
         return 24 * 60
     raise ValueError(f"Unsupported timeframe: {timeframe}")
 
-
 def last_closed_candle_time(timeframe):
     now = datetime.now(ZoneInfo("Asia/Kolkata")).replace(second=0, microsecond=0)
     interval = interval_minutes(timeframe)
@@ -32,7 +28,6 @@ def last_closed_candle_time(timeframe):
     elapsed_minutes = int((now - midnight).total_seconds() // 60)
     bucket = (elapsed_minutes // interval) * interval
     return midnight + timedelta(minutes=bucket)
-
 
 def fetch_symbol_candles(kite, token, days, timeframe):
     to_date = last_closed_candle_time(timeframe)
@@ -54,7 +49,6 @@ def fetch_symbol_candles(kite, token, days, timeframe):
 
     return rows
 
-
 def build_symbol_dataframe(records):
     if not records:
         return pd.DataFrame()
@@ -62,7 +56,6 @@ def build_symbol_dataframe(records):
     df["date"] = pd.to_datetime(df["date"], utc=True).dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
     df = df.sort_values("date").drop_duplicates(subset=["date"], keep="last")
     return df
-
 
 def update_symbol_dataframe_cache(cache, symbol, df, rows=200):
     if df.empty:
