@@ -1,6 +1,8 @@
 kiteconnect==5.0.1
-streamlit
+fastapi
+uvicorn
 pandas
 mysql-connector-python
 python-dotenv
+psutil
 openpyxl

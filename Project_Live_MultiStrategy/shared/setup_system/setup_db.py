@@ -26,6 +26,11 @@ def initialize_live_database(host, user, password, db_name):
         conn = mysql.connector.connect(host=host, user=user, password=password, database=db_name)
         cursor = conn.cursor()
 
+        def ensure_column(table_name, column_name, column_def):
+            cursor.execute(f"SHOW COLUMNS FROM {table_name} LIKE %s", (column_name,))
+            if cursor.fetchone() is None:
+                cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
+
         strategy_tables = ["symbols_green", "symbols_green3"]
         for table in strategy_tables:
             cursor.execute(f"""
@@ -39,9 +44,15 @@ def initialize_live_database(host, user, password, db_name):
                     buytime DATETIME DEFAULT NULL,
                     buy_order_id VARCHAR(100) DEFAULT NULL,
                     product VARCHAR(20) DEFAULT 'MIS',
+                    strategy VARCHAR(50) DEFAULT NULL,
                     last_sell_time DATETIME DEFAULT NULL
                 )
             """)
+            ensure_column(table, "strategy", "VARCHAR(50) DEFAULT NULL")
+            
+            # Set strategy name based on table
+            strat_name = table.replace("symbols_", "").upper()
+            cursor.execute(f"UPDATE {table} SET strategy=%s WHERE strategy IS NULL", (strat_name,))
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS trades_log (

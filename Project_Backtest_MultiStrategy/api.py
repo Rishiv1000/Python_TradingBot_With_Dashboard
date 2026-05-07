@@ -121,7 +121,8 @@ def kite_logged_in():
         return False
     try:
         with open(ACCESS_TOKEN_FILE) as f:
-            return bool(f.read().strip())
+            tok = f.read().strip()
+        return bool(tok)
     except Exception:
         return False
 
@@ -457,7 +458,7 @@ def setup_db():
 
 @app.post("/api/set-defaults")
 def set_defaults():
-    """Reset all positions and fill missing instrument tokens."""
+    """Reset all positions, fill missing instrument tokens, and set strategy names."""
     try:
         import time as _t
         from shared.candle_data import search_kite_symbol
@@ -469,10 +470,11 @@ def set_defaults():
         for strategy, meta in STRATEGIES.items():
             table = meta["table"]
             try:
-                # Reset open positions
+                # Reset open positions and set strategy name
                 db_exec(
                     f"UPDATE {table} SET isExecuted=0, buyprice=NULL, buytime=NULL, "
-                    f"buy_order_id=NULL, product='MIS', mode='PAPER'"
+                    f"buy_order_id=NULL, product='MIS', mode='PAPER', strategy=%s",
+                    (strategy.upper(),)
                 )
                 # Fill missing tokens
                 rows = db_fetchall(
@@ -564,3 +566,4 @@ def stop_server():
         os._exit(0)
     threading.Thread(target=_shutdown, daemon=True).start()
     return {"success": True, "message": "Server shutting down..."}
+

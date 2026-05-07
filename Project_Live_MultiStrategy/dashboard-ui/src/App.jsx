@@ -42,7 +42,7 @@ export default function App() {
     }
   }, []);
 
-  // ── fetch kite login status — only once on mount, and after session save ──
+  // ── fetch kite login status — on mount with retry, and after session save ──
   const fetchKiteStatus = useCallback(async () => {
     try {
       const res = await api.get("/api/kite/status");
@@ -51,6 +51,26 @@ export default function App() {
       setKiteLoggedIn(false);
     }
   }, []);
+
+  // ── on mount: fetch kite status, retry once after 3s if not logged in ─────
+  useEffect(() => {
+    let retryTimer = null;
+    const checkKite = async () => {
+      try {
+        const res = await api.get("/api/kite/status");
+        setKiteLoggedIn(res.data.logged_in);
+        if (!res.data.logged_in) {
+          // Retry once after 3s — API server may still be starting up
+          retryTimer = setTimeout(fetchKiteStatus, 3000);
+        }
+      } catch {
+        setKiteLoggedIn(false);
+        retryTimer = setTimeout(fetchKiteStatus, 3000);
+      }
+    };
+    checkKite();
+    return () => { if (retryTimer) clearTimeout(retryTimer); };
+  }, [fetchKiteStatus]);
 
   // ── fetch all symbols once ─────────────────────────────────────────────────
   const fetchAllSymbols = useCallback(async () => {
@@ -78,9 +98,8 @@ export default function App() {
     }
   }, []);
 
-  // ── on mount: fetch everything once ───────────────────────────────────────
+  // ── on mount: fetch status and symbols ───────────────────────────────────
   useEffect(() => {
-    fetchKiteStatus();
     fetchStatus();
     fetchAllSymbols();
   }, []);

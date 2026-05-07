@@ -121,6 +121,11 @@ def get_kite():
 
 
 def kite_logged_in() -> bool:
+    """
+    Check if a valid access token exists.
+    We only verify the token file exists and is non-empty — no network call.
+    A network call (profile()) can fail due to timeouts even with a valid token.
+    """
     if not API_KEY:
         return False
     if not os.path.exists(ACCESS_TOKEN_FILE):
@@ -203,19 +208,25 @@ class SymbolRequest(BaseModel):
 # ENDPOINTS
 # ═════════════════════════════════════════════════════════════════════════════
 
-@app.get("/api/status")
-def get_status():
-    # Check trading lock from base_config
-    trading_enabled = False
+def _read_trading_enabled() -> bool:
+    """Read REAL_TRADING_ENABLED from base_config.py by parsing the file directly."""
     try:
-        import importlib.util
         base_cfg_path = os.path.join(BASE_DIR, "shared", "base_config.py")
-        spec = importlib.util.spec_from_file_location("base_config_check", base_cfg_path)
-        mod  = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        trading_enabled = bool(getattr(mod, "REAL_TRADING_ENABLED", False))
+        with open(base_cfg_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("REAL_TRADING_ENABLED"):
+                    # e.g.  REAL_TRADING_ENABLED = True
+                    val = line.split("=", 1)[-1].strip()
+                    return val.lower() in ("true", "1", "yes")
     except Exception:
         pass
+    return False
+
+
+@app.get("/api/status")
+def get_status():
+    trading_enabled = _read_trading_enabled()
 
     cache = _get_proc_cache()
     result = {}
@@ -225,13 +236,15 @@ def get_status():
         open_count = 0
         try:
             conn = mysql.connector.connect(
-                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
+                connection_timeout=5,
             )
             cur = conn.cursor()
             cur.execute(f"SELECT COUNT(*) FROM {meta['table']}")
             sym_count = cur.fetchone()[0]
             cur.execute(f"SELECT COUNT(*) FROM {meta['table']} WHERE isExecuted=1")
             open_count = cur.fetchone()[0]
+            cur.close()
             conn.close()
         except Exception as e:
             print(f"[status] DB error for {strategy}: {e}")
@@ -504,7 +517,7 @@ def setup_db():
 
 @app.post("/api/set-defaults")
 def set_defaults():
-    """Reset all positions and fill missing instrument tokens."""
+    """Reset all positions, fill missing instrument tokens, and set strategy names."""
     try:
         import time as _t
         from shared.candle_data import search_kite_symbol
@@ -516,10 +529,11 @@ def set_defaults():
         for strategy, meta in STRATEGIES.items():
             table = meta["table"]
             try:
-                # Reset open positions
+                # Reset open positions and set strategy name
                 db_exec(
                     f"UPDATE {table} SET isExecuted=0, buyprice=NULL, buytime=NULL, "
-                    f"buy_order_id=NULL, product='MIS'"
+                    f"buy_order_id=NULL, product='MIS', strategy=%s",
+                    (strategy.upper(),)
                 )
                 # Fill missing tokens
                 rows = db_fetchall(

@@ -70,7 +70,16 @@ class ExitEngine:
         )
         conn.commit()
         conn.close()
-        print(f"[GREEN3] SOLD {row['symbol']} @ {sell_price} ({reason})")
+
+        # Immediately remove from in-memory dict so next tick can't trigger another sell
+        with self.state["lock"]:
+            token = row.get("instrument_token")
+            if token:
+                self.state["open_by_token"].pop(token, None)
+                self.state["subscribed_tokens"].discard(token)
+
+        print(f"[GREEN3] SOLD {row['symbol']} @ {sell_price} ({reason}) | PnL: ₹{round(pnl, 2)}")
+
 
     def _place_sell(self, row):
         order_id = str(row["buy_order_id"])

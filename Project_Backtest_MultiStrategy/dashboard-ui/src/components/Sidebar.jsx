@@ -2,13 +2,15 @@ import { useState } from "react";
 import api from "../api";
 
 export default function Sidebar({ status, kiteLoggedIn, autoRefresh, setAutoRefresh, refreshInterval, setRefreshInterval, lastSync, onRefresh, onSessionSaved }) {
-  const [loginUrl, setLoginUrl]       = useState("");
-  const [showModal, setShowModal]     = useState(false);
-  const [reqToken, setReqToken]       = useState("");
-  const [sessionMsg, setSessionMsg]   = useState("");
+  const [loginUrl, setLoginUrl] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [reqToken, setReqToken] = useState("");
+  const [sessionMsg, setSessionMsg] = useState("");
   const [sessionLoading, setSessionLoading] = useState(false);
   const [defaultsMsg, setDefaultsMsg] = useState("");
   const [defaultsLoading, setDefaultsLoading] = useState(false);
+  const [setupDbMsg, setSetupDbMsg] = useState("");
+  const [setupDbLoading, setSetupDbLoading] = useState(false);
 
   const handleGetUrl = async () => {
     try {
@@ -36,26 +38,32 @@ export default function Sidebar({ status, kiteLoggedIn, autoRefresh, setAutoRefr
     } finally { setSessionLoading(false); }
   };
 
+  const handleSetupDb = async () => {
+    setSetupDbLoading(true); setSetupDbMsg("");
+    try {
+      const res = await api.post("/api/setup-db");
+      setSetupDbMsg(res.data.success ? `✅ ${res.data.message}` : `❌ ${res.data.error}`);
+    } catch (e) {
+      setSetupDbMsg("❌ " + (e.response?.data?.detail || e.message));
+    } finally { setSetupDbLoading(false); }
+  };
+
   const handleSetDefaults = async () => {
     setDefaultsLoading(true); setDefaultsMsg("");
     try {
       const res = await api.post("/api/set-defaults");
-      if (res.data.success) {
-        setDefaultsMsg(`✅ Done — ${res.data.updated} tokens updated`);
-        onRefresh();
-      } else {
-        setDefaultsMsg("❌ " + (res.data.error || "Error"));
-      }
+      setDefaultsMsg(res.data.success ? `✅ ${res.data.updated} tokens updated` : `❌ ${res.data.error}`);
+      onRefresh();
     } catch (e) {
       setDefaultsMsg("❌ " + (e.response?.data?.detail || e.message));
     } finally { setDefaultsLoading(false); }
   };
 
-  const handleStart   = async (s) => { try { await api.post(`/api/strategy/${s}/start`);     onRefresh(); } catch (e) { alert(e.message); } };
-  const handleStop    = async (s) => { try { await api.post(`/api/strategy/${s}/stop`);      onRefresh(); } catch (e) { alert(e.message); } };
-  const handleTerm    = async (s) => { try { await api.post(`/api/strategy/${s}/terminate`); onRefresh(); } catch (e) { alert(e.message); } };
-  const handleStopAll = async ()  => { try { await api.post("/api/strategy/stop-all");       onRefresh(); } catch (e) { alert(e.message); } };
-  const handleKillAll = async ()  => { try { await api.post("/api/strategy/kill-all");       onRefresh(); } catch (e) { alert(e.message); } };
+  const handleStart = async (s) => { try { await api.post(`/api/strategy/${s}/start`); onRefresh(); } catch (e) { alert(e.message); } };
+  const handleStop = async (s) => { try { await api.post(`/api/strategy/${s}/stop`); onRefresh(); } catch (e) { alert(e.message); } };
+  const handleTerm = async (s) => { try { await api.post(`/api/strategy/${s}/terminate`); onRefresh(); } catch (e) { alert(e.message); } };
+  const handleStopAll = async () => { try { await api.post("/api/strategy/stop-all"); onRefresh(); } catch (e) { alert(e.message); } };
+  const handleKillAll = async () => { try { await api.post("/api/strategy/kill-all"); onRefresh(); } catch (e) { alert(e.message); } };
 
   const sliderStyle = {
     width: "100%",
@@ -92,27 +100,6 @@ export default function Sidebar({ status, kiteLoggedIn, autoRefresh, setAutoRefr
         </div>
         <hr className="divider" />
 
-        {/* Set Defaults */}
-        <div style={{ marginBottom: "16px" }}>
-          <div style={{ fontSize: "12px", fontWeight: 700, color: "#8b949e", textTransform: "uppercase", marginBottom: "8px" }}>🔧 Setup</div>
-          <button
-            className="btn-blue"
-            style={{ width: "100%" }}
-            onClick={handleSetDefaults}
-            disabled={defaultsLoading}
-          >
-            {defaultsLoading ? "Running..." : "⚙️ Set Defaults"}
-          </button>
-          <div style={{ fontSize: "11px", color: "#8b949e", marginTop: "4px" }}>
-            Resets positions & fills missing instrument tokens
-          </div>
-          {defaultsMsg && (
-            <div style={{ fontSize: "12px", marginTop: "6px", color: defaultsMsg.startsWith("✅") ? "#2ea043" : "#da3633" }}>
-              {defaultsMsg}
-            </div>
-          )}
-        </div>
-        <hr className="divider" />
 
         {/* Strategy Control */}
         <div style={{ marginBottom: "16px" }}>
@@ -136,19 +123,29 @@ export default function Sidebar({ status, kiteLoggedIn, autoRefresh, setAutoRefr
           })}
           <div style={{ display: "flex", gap: "6px", marginTop: "8px" }}>
             <button className="btn-warning" style={{ flex: 1, fontSize: "12px" }} onClick={handleStopAll}>⛔ Stop All</button>
-            <button className="btn-danger"  style={{ flex: 1, fontSize: "12px" }} onClick={handleKillAll}>💀 Kill All</button>
+            <button className="btn-danger" style={{ flex: 1, fontSize: "12px" }} onClick={handleKillAll}>💀 Kill All</button>
           </div>
         </div>
         <hr className="divider" />
 
-        {/* Refresh */}
+        {/* Setup */}
         <div style={{ marginBottom: "16px" }}>
-          <div style={{ fontSize: "12px", fontWeight: 700, color: "#8b949e", textTransform: "uppercase", marginBottom: "8px" }}>🔄 Refresh</div>
-          <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "13px", marginBottom: "8px" }}>
-            <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} style={{ width: "auto", padding: 0, border: "none" }} />
-            Auto-refresh
-          </label>
-          <button className="btn-secondary" style={{ width: "100%", fontSize: "12px", marginTop: "4px" }} onClick={onRefresh}>Refresh Now</button>
+          <div style={{ fontSize: "12px", fontWeight: 700, color: "#8b949e", textTransform: "uppercase", marginBottom: "8px" }}>🔧 Setup</div>
+          <button className="btn-blue" style={{ width: "100%", marginBottom: "6px" }} onClick={handleSetupDb} disabled={setupDbLoading}>
+            {setupDbLoading ? "Setting up..." : "🗄️ Setup DB"}
+          </button>
+          {setupDbMsg && <div style={{ fontSize: "11px", marginBottom: "6px", color: setupDbMsg.startsWith("✅") ? "#2ea043" : "#da3633" }}>{setupDbMsg}</div>}
+          <button className="btn-secondary" style={{ width: "100%" }} onClick={handleSetDefaults} disabled={defaultsLoading}>
+            {defaultsLoading ? "Running..." : "⚙️ Set Defaults"}
+          </button>
+          <div style={{ fontSize: "11px", color: "#8b949e", marginTop: "4px" }}>
+            Resets positions & fills missing instrument tokens
+          </div>
+          {defaultsMsg && (
+            <div style={{ fontSize: "12px", marginTop: "6px", color: defaultsMsg.startsWith("✅") ? "#2ea043" : "#da3633" }}>
+              {defaultsMsg}
+            </div>
+          )}
         </div>
 
         <div style={{ fontSize: "11px", color: "#484f58", marginTop: "auto", paddingTop: "8px" }}>Last sync: {lastSync || "—"}</div>

@@ -6,7 +6,6 @@ export default function PositionsTab() {
   const [loading, setLoading] = useState(true);
 
   const fetchPositions = async () => {
-    setLoading(true);
     try {
       const res = await api.get("/api/positions");
       setPositions(res.data);
@@ -19,6 +18,8 @@ export default function PositionsTab() {
 
   useEffect(() => {
     fetchPositions();
+    const interval = setInterval(fetchPositions, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   return (

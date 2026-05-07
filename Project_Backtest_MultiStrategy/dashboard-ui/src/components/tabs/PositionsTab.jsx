@@ -5,9 +5,17 @@ export default function PositionsTab() {
   const [positions, setPositions] = useState([]);
   const [loading, setLoading]     = useState(true);
 
+  const fetchPositions = () => {
+    api.get("/api/positions")
+      .then(r => setPositions(r.data))
+      .catch(() => setPositions([]))
+      .finally(() => setLoading(false));
+  };
+
   useEffect(() => {
-    setLoading(true);
-    api.get("/api/positions").then(r => setPositions(r.data)).catch(() => setPositions([])).finally(() => setLoading(false));
+    fetchPositions();
+    const id = setInterval(fetchPositions, 5000);
+    return () => clearInterval(id);
   }, []);
 
   return (

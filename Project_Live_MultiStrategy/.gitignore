@@ -1,0 +1,28 @@
+# Sensitive
+.env
+shared/.env
+shared/access_token.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Trading specific
+logs/*.log
+*/.reload_symbols
+*/live_df_cache.pkl
+
+# UI
+dashboard-ui/node_modules/
+dashboard-ui/dist/
+dashboard-ui/.env
+dashboard-ui/.env.local
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

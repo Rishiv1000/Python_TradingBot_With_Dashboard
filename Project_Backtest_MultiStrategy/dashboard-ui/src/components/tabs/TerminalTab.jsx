@@ -39,9 +39,12 @@ function StrategyTerminal({ strategy, color }) {
 }
 
 export default function TerminalTab({ status }) {
+  const strategies = status
+    ? Object.entries(status)
+    : [["GREEN", { color: "#2ea043" }], ["GREEN3", { color: "#58a6ff" }]];
   return (
     <div>
-      {status && Object.entries(status).map(([s, info]) => (
+      {strategies.map(([s, info]) => (
         <StrategyTerminal key={s} strategy={s} color={info.color} />
       ))}
     </div>

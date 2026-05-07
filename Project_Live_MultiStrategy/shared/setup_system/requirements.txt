@@ -1,5 +1,8 @@
-streamlit
+kiteconnect==5.0.1
+fastapi
+uvicorn
 pandas
+mysql-connector-python
 python-dotenv
-kiteconnect
 psutil
+openpyxl

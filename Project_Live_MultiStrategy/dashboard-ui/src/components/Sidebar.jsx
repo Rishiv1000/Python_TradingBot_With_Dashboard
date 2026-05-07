@@ -113,13 +113,13 @@ export default function Sidebar({
     }
   };
 
-  const [setupDbMsg, setSetupDbMsg]         = useState("");
+  const [setupDbMsg, setSetupDbMsg] = useState("");
   const [setupDbLoading, setSetupDbLoading] = useState(false);
-  const [defaultsMsg, setDefaultsMsg]       = useState("");
+  const [defaultsMsg, setDefaultsMsg] = useState("");
   const [defaultsLoading, setDefaultsLoading] = useState(false);
-  const [reloadMsg, setReloadMsg]           = useState("");
-  const [reloadLoading, setReloadLoading]   = useState(false);
-  const [stopApiMsg, setStopApiMsg]         = useState("");
+  const [reloadMsg, setReloadMsg] = useState("");
+  const [reloadLoading, setReloadLoading] = useState(false);
+  const [stopApiMsg, setStopApiMsg] = useState("");
 
   const handleSetupDb = async () => {
     setSetupDbLoading(true); setSetupDbMsg("");
@@ -304,42 +304,6 @@ export default function Sidebar({
         </div>
 
         <hr className="divider" />
-
-        {/* Auto Refresh */}
-        <div style={{ marginBottom: "16px" }}>
-          <div style={{ fontSize: "12px", fontWeight: 700, color: "#8b949e", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>
-            🔄 Refresh
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "13px" }}>
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-                style={{ width: "auto", padding: 0, border: "none" }}
-              />
-              Auto-refresh
-            </label>
-          </div>
-          {autoRefresh && (
-            <div style={{ marginBottom: "8px" }}>
-              <div style={{ fontSize: "12px", color: "#8b949e", marginBottom: "4px" }}>
-                Interval: {refreshInterval}s
-              </div>
-              <input
-                type="range"
-                min={2}
-                max={30}
-                value={refreshInterval}
-                onChange={(e) => setRefreshInterval(Number(e.target.value))}
-                style={{ width: "100%", padding: 0, border: "none", background: "transparent", cursor: "pointer" }}
-              />
-            </div>
-          )}
-          <button className="btn-secondary" style={{ width: "100%", fontSize: "12px" }} onClick={onRefresh}>
-            Refresh Now
-          </button>
-        </div>
 
         <div style={{ fontSize: "11px", color: "#484f58", marginTop: "auto", paddingTop: "8px" }}>
           Last sync: {lastSync || "—"}

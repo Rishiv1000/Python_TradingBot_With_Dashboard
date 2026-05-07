@@ -54,12 +54,14 @@ def initialize_backtest_database(host, user, password, db_name):
         cursor.execute("SHOW TABLES LIKE 'symbols_state'")
         if cursor.fetchone():
             for table in strategy_tables:
+                # Determine strategy name from table name (e.g., symbols_green -> GREEN)
+                strat_name = table.replace("symbols_", "").upper()
                 cursor.execute(f"""
                     INSERT IGNORE INTO {table}
-                    (symbol, exchange, instrument_token, isExecuted, product, mode)
-                    SELECT symbol, exchange, instrument_token, 0, 'MIS', 'PAPER'
+                    (symbol, exchange, instrument_token, isExecuted, product, mode, strategy)
+                    SELECT symbol, exchange, instrument_token, 0, 'MIS', 'PAPER', %s
                     FROM symbols_state
-                """)
+                """, (strat_name,))
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS trades_log (

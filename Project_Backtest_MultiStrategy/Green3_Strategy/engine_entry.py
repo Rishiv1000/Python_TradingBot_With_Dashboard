@@ -2,7 +2,7 @@ import sys
 import os
 import time
 import mysql.connector
-from datetime import datetime, timedelta
+from datetime import datetime
 import pickle
 
 STRATEGY_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -19,6 +19,7 @@ class EntryEngineGreen3:
     def __init__(self, kite, df_cache):
         self.kite = kite
         self.df_cache = df_cache
+        self._failed_signal: dict = {}  # symbol → last failed signal_ts (str)
 
     def _db_connection(self):
         return mysql.connector.connect(
@@ -28,14 +29,30 @@ class EntryEngineGreen3:
             database=config.DB_NAME
         )
 
-    def _check_signal(self, df, last_sell_time=None):
+    def _check_signal(self, symbol, df, last_sell_time=None):
         """Signal: last 3 completed candles must ALL be GREEN."""
-        if df is None or len(df) < 4: return False
+        if df is None or len(df) < 4:
+            return False
+
+        # Last 3 completed candles (exclude forming candle at -1)
         completed = df.iloc[-4:-1]
+        signal_ts = str(df.iloc[-2]["date"]) if "date" in df.columns else None
+
+        # If this exact signal was already attempted and failed, skip
+        if signal_ts and self._failed_signal.get(symbol) == signal_ts:
+            print(f"[GREEN3] ⏭️ {symbol} — same signal already attempted, waiting for new candles.")
+            return False
+
         def get_color(row):
             return "GREEN" if row["close"] > row["open"] else "RED"
         colors = completed.apply(get_color, axis=1)
-        return all(colors == "GREEN")
+
+        if not all(colors == "GREEN"):
+            return False
+
+        # Signal valid — clear old failure record
+        self._failed_signal.pop(symbol, None)
+        return True
 
     def perform_buy(self, symbol, token, exchange, buy_price, buy_time):
         final_buy_price = buy_price * (1 + getattr(config, 'BUY_SLIPPAGE', 0.05) / 100)
@@ -84,10 +101,18 @@ class EntryEngineGreen3:
                 print(f"Error fetching {symbol}: {e}")
                 continue
 
-            if self._check_signal(df, last_sell_time=row["last_sell_time"]):
+            if self._check_signal(symbol, df, last_sell_time=row["last_sell_time"]):
                 buy_price = float(df.iloc[-1]["close"])
-                buy_time = df.iloc[-1]["date"]
+                buy_time  = str(df.iloc[-1]["date"])
+                candles   = len(df)
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] [GREEN3] 🟢 SIGNAL {symbol} | candles:{candles} → BUY")
                 self.perform_buy(symbol, token, exchange, buy_price, buy_time)
+            else:
+                if df is not None and len(df) >= 4:
+                    completed = df.iloc[-4:-1]
+                    def get_color(row): return "GREEN" if row["close"] > row["open"] else "RED"
+                    colors = list(completed.apply(get_color, axis=1))
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] [GREEN3] {symbol} | last 3: {colors} | candles:{len(df)}")
 
         try:
             cache_file = os.path.join(STRATEGY_DIR, "live_df_cache.pkl")

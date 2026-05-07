@@ -50,7 +50,7 @@ def kite_session():
     return kite
 
 
-def reset_strategy_table(cursor, table_name):
+def reset_strategy_table(cursor, table_name, strategy_name):
     cursor.execute(
         f"""
         UPDATE {table_name}
@@ -59,8 +59,10 @@ def reset_strategy_table(cursor, table_name):
             buytime=NULL,
             buy_order_id=NULL,
             product='MIS',
-            mode='PAPER'
-        """
+            mode='PAPER',
+            strategy=%s
+        """,
+        (strategy_name,)
     )
 
 
@@ -109,7 +111,7 @@ def main():
     kite = kite_session()
     total_updated = 0
     for strategy_name, table_name in STRATEGY_TABLES.items():
-        reset_strategy_table(cursor, table_name)
+        reset_strategy_table(cursor, table_name, strategy_name)
         total_updated += fill_missing_tokens(cursor, table_name, strategy_name, kite)
 
     conn.commit()

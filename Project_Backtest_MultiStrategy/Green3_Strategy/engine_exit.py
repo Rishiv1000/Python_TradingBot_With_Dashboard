@@ -114,7 +114,7 @@ class ExitEngineGreen3:
         print("🛡️ [GREEN3] Exit Monitor active.")
         while True:
             self._refresh_positions(kws)
-            time.sleep(2)
+            time.sleep(0.5)
 
     def _perform_sell(self, row, ltp, reason):
         sell_price = ltp * (1 - (getattr(config, 'SELL_SLIPPAGE', 0.05) / 100))

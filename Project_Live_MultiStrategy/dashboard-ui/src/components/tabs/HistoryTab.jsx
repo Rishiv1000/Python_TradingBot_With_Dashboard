@@ -6,7 +6,6 @@ export default function HistoryTab() {
   const [loading, setLoading] = useState(true);
 
   const fetchHistory = async () => {
-    setLoading(true);
     try {
       const res = await api.get("/api/history");
       setHistory(res.data);
@@ -19,6 +18,8 @@ export default function HistoryTab() {
 
   useEffect(() => {
     fetchHistory();
+    const interval = setInterval(fetchHistory, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const totalPnl = history.reduce((sum, t) => sum + (t.pnl || 0), 0);

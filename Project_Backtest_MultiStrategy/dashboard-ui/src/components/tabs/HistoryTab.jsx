@@ -5,9 +5,17 @@ export default function HistoryTab() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchHistory = () => {
+    api.get("/api/history")
+      .then(r => setHistory(r.data))
+      .catch(() => setHistory([]))
+      .finally(() => setLoading(false));
+  };
+
   useEffect(() => {
-    setLoading(true);
-    api.get("/api/history").then(r => setHistory(r.data)).catch(() => setHistory([])).finally(() => setLoading(false));
+    fetchHistory();
+    const id = setInterval(fetchHistory, 5000);
+    return () => clearInterval(id);
   }, []);
 
   const totalPnl = history.reduce((s, t) => s + (t.pnl || 0), 0);
